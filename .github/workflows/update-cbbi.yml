@@ -26,10 +26,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies
+            - name: Install dependencies
         run: |
           cd cbbi
-          pip install -e . || pip install polars numpy matplotlib seaborn pyfiglet sty fire tqdm httpx
+          pip install -e . || true
+          pip install polars numpy matplotlib seaborn pyfiglet sty fire tqdm httpx python-telegram-bot
 
       - name: Run CBBI
         run: |
