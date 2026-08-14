@@ -1,0 +1,49 @@
+name: Auto Update CBBI
+
+on:
+  schedule:
+    - cron: '0 */2 * * *'   # 每 2 小时
+  workflow_dispatch:        # 支持手动运行
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v4
+
+      - name: Checkout CBBI source
+        uses: actions/checkout@v4
+        with:
+          repository: Zaczero/CBBI
+          path: cbbi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          cd cbbi
+          pip install -e . || pip install polars numpy matplotlib seaborn pyfiglet sty fire tqdm httpx
+
+      - name: Run CBBI
+        run: |
+          cd cbbi
+          python main.py --output-dir ../output
+
+      - name: Process data to CSV
+        run: |
+          python process.py
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/ output/ || true
+          git commit -m "Auto update CBBI $(date -u +'%Y-%m-%d %H:%M UTC')" || exit 0
+          git push
