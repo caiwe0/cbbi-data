@@ -8,44 +8,47 @@ DATA_DIR = Path("data")
 DATA_DIR.mkdir(exist_ok=True)
 
 json_path = OUTPUT_DIR / "latest.json"
+
 if not json_path.exists():
-    print("latest.json not found")
+    print("❌ latest.json not found")
     exit(1)
 
 with open(json_path, encoding="utf-8") as f:
     data = json.load(f)
 
-# CBBI 的 Confidence 字段
 confidence_series = data.get("Confidence", {})
 if not confidence_series:
-    print("No Confidence data found")
+    print("❌ No Confidence data found in latest.json")
     exit(1)
 
-# 取最新一条
-latest_ts = max(int(k) for k in confidence_series.keys())
-latest_value = confidence_series[str(latest_ts)]
-latest_date = datetime.fromtimestamp(latest_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+# 按时间戳排序，生成完整历史
+sorted_items = sorted(
+    ((int(ts), float(val)) for ts, val in confidence_series.items() if val is not None),
+    key=lambda x: x[0]
+)
 
 csv_path = DATA_DIR / "cbbi.csv"
-write_header = not csv_path.exists()
 
-# 避免重复写入同一天
-rows = []
-if csv_path.exists():
-    with open(csv_path, newline="", encoding="utf-8") as f:
-        rows = list(csv.reader(f))
-    if rows and rows[-1][0] == latest_date:
-        print(f"Already updated for {latest_date}")
-        exit(0)
-
-with open(csv_path, "a", newline="", encoding="utf-8") as f:
+with open(csv_path, "w", newline="", encoding="utf-8") as f:
     writer = csv.writer(f)
-    if write_header:
-        writer.writerow(["date", "confidence"])
-    writer.writerow([latest_date, round(float(latest_value) * 100, 2)])  # 转成 0-100
+    writer.writerow(["date", "timestamp", "confidence"])  # 表头
 
-print(f"Updated: {latest_date} → {round(float(latest_value)*100, 2)}")
+    for ts, val in sorted_items:
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        # Confidence 原本是 0~1，转成 0~100
+        confidence_100 = round(val * 100, 2)
+        writer.writerow([date_str, ts, confidence_100])
 
-# 同时保存最新值方便快速读取
-with open(DATA_DIR / "latest.txt", "w") as f:
-    f.write(f"{latest_date},{round(float(latest_value)*100, 2)}\n")
+# 同时更新 latest.txt（方便快速查看最新值）
+if sorted_items:
+    latest_ts, latest_val = sorted_items[-1]
+    latest_date = datetime.fromtimestamp(latest_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+    latest_conf = round(latest_val * 100, 2)
+
+    with open(DATA_DIR / "latest.txt", "w", encoding="utf-8") as f:
+        f.write(f"{latest_date},{latest_conf}\n")
+
+    print(f"✅ 完整历史已写入 cbbi.csv（共 {len(sorted_items)} 条）")
+    print(f"✅ 最新值: {latest_date} → {latest_conf}")
+else:
+    print("❌ 没有有效数据")
